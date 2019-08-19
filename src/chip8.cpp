@@ -155,6 +155,9 @@ SideEffects Chip8::cycle()
     } else if (instr == 0x00EE) { // RET
         pc = stack.back();
         stack.pop_back();
+    } else if (instr >> 12 == 0) {
+        fprintf(stderr, "Machine language subroutine are not supported\n");
+        exit(1);
     } else if (instr >> 12 == 1) { // JP
         pc = instr & 0x0FFF;
     } else if (instr >> 12 == 2) { // CALL
@@ -249,7 +252,7 @@ SideEffects Chip8::cycle()
                 bool r = (bool)((byte >> j) & 1);
                 uint8_t xp = regs[x] + 7 - j;
                 xp = xp % 64;
-                if (r && screen[yp*64+xp]) regs[0xf] = 1;
+                regs[0xf] = r && screen[yp*64+xp];
                 screen[yp*64+xp] ^= r;
             }
         }

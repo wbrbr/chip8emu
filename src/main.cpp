@@ -189,10 +189,6 @@ int main(int argc, char** argv)
             SDL_RenderPresent(renderer);
             last_frame = current;
         }
-
-        // eff.wait = true; // single stepping
-        //
-
     }
 
     SDL_DestroyRenderer(renderer);
