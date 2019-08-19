@@ -1,14 +1,10 @@
+#include "glad/glad.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #include "chip8.hpp"
-
-void clear(SDL_Texture* texture)
-{
-    void* buf;
-    int pitch;
-    SDL_LockTexture(texture, NULL, &buf, &pitch);
-    memset(buf, 0, 32*pitch);
-    SDL_UnlockTexture(texture);
-}
+#include "imgui.h"
+#include "imgui_impl_sdl.h"
+#include "imgui_impl_opengl2.h"
 
 bool translateKey(int scancode, int* keycode)
 {
@@ -89,20 +85,41 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    SDL_Window* window = SDL_CreateWindow("chip8emu", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 320, 0);
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
-    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Window* window = SDL_CreateWindow("chip8emu", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 640, window_flags);
+    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, gl_context);
+    gladLoadGL();
 
-    clear(texture);
+	IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
+	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL2_Init();	
+
+
+    uint32_t pixels[64*32];
+    memset(pixels, 0, sizeof(pixels));
+    glEnable(GL_TEXTURE_2D);
+    unsigned int texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 32, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     SDL_Event e;
 
     Chip8 chip8;
     chip8.load(std::string(argv[1]));
-
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
-    SDL_RenderPresent(renderer);
 
     uint32_t last_cycle = SDL_GetTicks();
     uint32_t last_frame = SDL_GetTicks();
@@ -115,6 +132,7 @@ int main(int argc, char** argv)
 
         SDL_PollEvent(&e);
         if (e.type == SDL_QUIT) break;
+		ImGui_ImplSDL2_ProcessEvent(&e);
 
         int keycode;
         if (waiting && e.type == SDL_KEYDOWN && translateKey(e.key.keysym.scancode, &keycode)) {
@@ -127,7 +145,8 @@ int main(int argc, char** argv)
             SideEffects eff = chip8.cycle();
 
             if (eff.clear) {
-                clear(texture);
+                memset(pixels, 0, sizeof(pixels));
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 64, 32, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
             } else if (eff.draw_n > 0) {
                 SDL_Rect r;
                 r.y = eff.draw_y;
@@ -139,21 +158,17 @@ int main(int argc, char** argv)
                     r.x = 0;
                     r.w = 64;
                 }
-                void* buf;
-                int pitch;
-                SDL_LockTexture(texture, &r, &buf, &pitch);
-                bool* screen = chip8.screen;
 
-                uint32_t* pixels = (uint32_t*)buf;
+                bool* screen = chip8.screen;
 
                 for (int j = 0; j < r.h; j++)
                 {
                     for (int i = 0; i < r.w; i++)
                     {
-                        pixels[j*pitch/4+i] = screen[(r.y+j)*64+r.x+i] * 0xFFFFFFFF;
+                        pixels[(r.y+j)*64+r.x+i] = screen[(r.y+j)*64+r.x+i] * 0xFFFFFFFF;
                     }
                 }
-                SDL_UnlockTexture(texture);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 64, 32, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
             }
 
             if (eff.wait) {
@@ -184,14 +199,42 @@ int main(int argc, char** argv)
 
         if (current - last_frame >= 17) {
             if (chip8.dt > 0) chip8.dt--;
-            SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
-            SDL_RenderPresent(renderer);
             last_frame = current;
+
+			ImGui_ImplOpenGL2_NewFrame();
+			ImGui_ImplSDL2_NewFrame(window);
+			ImGui::NewFrame();
+			bool p_open;
+			ImGui::ShowDemoWindow(&p_open);
+			ImGui::Render();
+
+            glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+            glClearColor(0.f, 0.f, 0.f, 1.f);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex2f(-1.f, 1.f);
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex2f(1.f, 1.f);
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex2f(1.f, -1.f);
+            glTexCoord2f(.0f, 1.0f);
+            glVertex2f(-1.f, -1.f);
+
+            glEnd();
+
+
+            ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+            SDL_GL_SwapWindow(window);
         }
     }
 
-    SDL_DestroyRenderer(renderer);
+
+    ImGui_ImplOpenGL2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
 }
