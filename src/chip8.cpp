@@ -243,6 +243,7 @@ SideEffects Chip8::cycle()
         eff.draw_x = regs[x];
         eff.draw_y = regs[y];
 
+        regs[0xf] = 0;
         for (uint8_t i = 0; i < n; i++)
         {
             uint8_t yp = regs[y] + i;
@@ -252,7 +253,7 @@ SideEffects Chip8::cycle()
                 bool r = (bool)((byte >> j) & 1);
                 uint8_t xp = regs[x] + 7 - j;
                 xp = xp % 64;
-                regs[0xf] = r && screen[yp*64+xp];
+                regs[0xf] |= r && screen[yp*64+xp];
                 screen[yp*64+xp] ^= r;
             }
         }

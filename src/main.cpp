@@ -73,6 +73,24 @@ bool translateKey(int scancode, int* keycode)
     return true;
 }
 
+void drawDebugWindow(Chip8& chip8)
+{
+    char buf[10];
+    for (int i = 0; i <= 0xf; i++)
+    {
+        snprintf(buf, 10, "V%x = 0x%x", i, chip8.regs[i]);
+        ImGui::Text(buf);
+    }
+
+    snprintf(buf, 10, "I  = 0x%x", chip8.ir);
+    ImGui::Text(buf);
+
+    ImGui::Separator();
+    uint16_t instr = (chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc+1];
+    snprintf(buf, 10, "%04x", instr);
+    ImGui::Text(buf);
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 2) {
@@ -125,6 +143,8 @@ int main(int argc, char** argv)
     uint32_t last_frame = SDL_GetTicks();
     bool waiting = false;
     int wait_reg;
+    bool step_go = false;
+    bool stepmode = true;
 
     while (true) {
 
@@ -132,6 +152,20 @@ int main(int argc, char** argv)
 
         SDL_PollEvent(&e);
         if (e.type == SDL_QUIT) break;
+        if (e.type == SDL_KEYDOWN) {
+            switch(e.key.keysym.scancode) {
+                case SDL_SCANCODE_SPACE:
+                    stepmode = !stepmode;
+                    break;
+
+                case SDL_SCANCODE_N:
+                    step_go = true;
+                    break;
+
+                default:
+                    break;
+            }
+        }
 		ImGui_ImplSDL2_ProcessEvent(&e);
 
         int keycode;
@@ -140,7 +174,8 @@ int main(int argc, char** argv)
             chip8.regs[wait_reg] = keycode;
         }
         
-        if (!waiting && current - last_cycle >= 2) {
+        if (!(stepmode && !step_go) && !waiting && current - last_cycle >= 2) {
+            step_go = false;
             last_cycle = current;
             SideEffects eff = chip8.cycle();
 
@@ -204,8 +239,9 @@ int main(int argc, char** argv)
 			ImGui_ImplOpenGL2_NewFrame();
 			ImGui_ImplSDL2_NewFrame(window);
 			ImGui::NewFrame();
-			bool p_open;
-			ImGui::ShowDemoWindow(&p_open);
+			if (stepmode) {
+                drawDebugWindow(chip8);
+            }
 			ImGui::Render();
 
             glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
