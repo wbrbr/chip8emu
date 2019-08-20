@@ -85,10 +85,37 @@ void drawDebugWindow(Chip8& chip8)
     snprintf(buf, 10, "I  = 0x%x", chip8.ir);
     ImGui::Text(buf);
 
+    snprintf(buf, 10, "DT = 0x%x", chip8.dt);
+    ImGui::Text(buf);
+
+    snprintf(buf, 10, "ST = 0x%x", chip8.st);
+    ImGui::Text(buf);
+
     ImGui::Separator();
     uint16_t instr = (chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc+1];
     snprintf(buf, 10, "%04x", instr);
     ImGui::Text(buf);
+}
+
+void audio_callback(void* userdata, uint8_t* stream, int len)
+{
+    Chip8* chip8 = ((Chip8**)userdata)[0];
+    if (chip8->st == 0) {
+        memset(stream, 0, len);
+        return;
+    }
+    SDL_AudioSpec* spec = ((SDL_AudioSpec**)userdata)[1];
+    float dt = 1.f / (float)spec->freq;
+    uint32_t milli = SDL_GetTicks();
+    float t = (float)milli / 1000.f;
+    float* out = (float*)stream;
+    for (int i = 0; i < spec->samples; i++)
+    {
+        float v = 2.f * (t * 440.f - floor(0.5f + t * 440.f));
+        out[2*i] = v;
+        out[2*i+1] = v;
+        t += dt;
+    }
 }
 
 int main(int argc, char** argv)
@@ -98,7 +125,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
         fprintf(stderr, "SDL_Init: %s", SDL_GetError());
         return 1;
     }
@@ -138,6 +165,26 @@ int main(int argc, char** argv)
 
     Chip8 chip8;
     chip8.load(std::string(argv[1]));
+
+    SDL_AudioSpec want, have;
+    memset(&want, 0, sizeof(want));
+
+    void* userdata[2];
+    userdata[0] = &chip8;
+    userdata[1] = &have;
+
+    want.freq = 44100;
+    want.format = AUDIO_F32;
+    want.channels = 2;
+    want.samples = 2048;
+    want.callback = audio_callback;
+    want.userdata = userdata;
+
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
+    if (dev == 0) {
+        fprintf(stderr, "SDL_OpenAudioDevice: %s\n", SDL_GetError());
+    }
+    SDL_PauseAudioDevice(dev, 0);
 
     uint32_t last_cycle = SDL_GetTicks();
     uint32_t last_frame = SDL_GetTicks();
@@ -234,6 +281,7 @@ int main(int argc, char** argv)
 
         if (current - last_frame >= 17) {
             if (chip8.dt > 0) chip8.dt--;
+            if (chip8.st > 0) chip8.st--;
             last_frame = current;
 
 			ImGui_ImplOpenGL2_NewFrame();

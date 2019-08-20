@@ -124,6 +124,7 @@ Chip8::Chip8()
     keys = 0;
     dt = 0;
     pc = 0x200;
+    sp = 80;
 }
 
 void Chip8::load(std::string rompath)
@@ -153,15 +154,17 @@ SideEffects Chip8::cycle()
         memset(screen, 0, sizeof(screen));
         eff.clear = true;
     } else if (instr == 0x00EE) { // RET
-        pc = stack.back();
-        stack.pop_back();
+        sp -= 2;
+        pc = (memory[sp] << 8) | memory[sp+1];
     } else if (instr >> 12 == 0) {
         fprintf(stderr, "Machine language subroutine are not supported\n");
         exit(1);
     } else if (instr >> 12 == 1) { // JP
         pc = instr & 0x0FFF;
     } else if (instr >> 12 == 2) { // CALL
-        stack.push_back(pc);
+        memory[sp] = (pc >> 8) & 0xF;
+        memory[sp+1] = pc & 0xFF;
+        sp += 2;
         pc = instr & 0x0FFF;
     } else if (instr >> 12 == 3) { // SE
         uint8_t kk = instr & 0x00FF;
@@ -274,7 +277,8 @@ SideEffects Chip8::cycle()
         uint8_t x = (instr >> 8) & 0xF;
         dt = regs[x];
     } else if (instr >> 12 == 0xf && (instr & 0xFF) == 0x18) { // LD
-        // TODO
+        uint8_t x = (instr >> 8) & 0xF;
+        st = regs[x];
     } else if (instr >> 12 == 0xf && (instr & 0xFF) == 0x1E) { // ADD
         uint8_t x = (instr >> 8) & 0xF;
         ir = ir + regs[x];

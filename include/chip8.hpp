@@ -26,13 +26,10 @@ public:
     uint16_t ir;
     uint8_t memory[0xFFF];
     uint8_t dt;
-    int pc;
+    uint8_t st;
+    uint16_t pc;
+    uint16_t sp;
     uint16_t keys;
-    // TODO: remove this, use sp instead
-    std::vector<int> stack;
-    // TODO: glyphs
-    //
-    // uint8_t screen[64*32/8]; // 256
     bool screen[64*32];
 };
 #endif
